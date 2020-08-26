@@ -1,2 +1,3 @@
-# airflow-pianka-sh
+# pianka.sh
+
 Help manage Cloud Composer instances
