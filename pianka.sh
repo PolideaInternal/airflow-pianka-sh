@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# License: Public Domain
 
 _SHORT_OPTIONS="
 h C: L: v
@@ -18,9 +17,10 @@ mkdir -pv "${APP_CACHE_DIR}"
 
 CMDNAME="$(basename -- "$0")"
 
-export KUBECONFIG=$(mktemp)
+KUBECONFIG=$(mktemp)
+export KUBECONFIG
 
-trap "rm -f ${KUBECONFIG}" EXIT
+trap 'rm -f "${KUBECONFIG}"' EXIT
 
 function save_to_file {
     # shellcheck disable=SC2005
@@ -41,13 +41,13 @@ export COMPOSER_LOCATION=${COMPOSER_LOCATION:=}
 export VERBOSE="false"
 
 usage() {
-      echo """
+cat << EOF
 Usage: ${CMDNAME} [-h] [-C] [-L] [-v] <command>
 
 Help manage Cloud Composer instances
 
-The script is adapted to work properly when added to the PATH variable. This will allow you to use this 
-script from any location.
+The script is adapted to work properly when added to the PATH variable. This will allow you to use
+this script from any location.
 
 Flags:
 
@@ -64,23 +64,24 @@ Flags:
 These are supported commands used in various situations:
 
 shell
-        Open shell access to Airflow's worker. This allows you to test commands in the context of the Airflow instance.
+        Open shell access to Airflow's worker. This allows you to test commands in the context of
+        the Airflow instance.
 
 info
-        Print basic information about the environemnt.
+        Print basic information about the environment.
 
 run
         Run arbitrary command on the Airflow worker.
 
         Example:
         If you want to list currnet running process, run following command:
-        ${CMDNAME} run -- ps -aux 
-        
+        ${CMDNAME} run -- ps -aux
+
         If you want to list DAGs, run following command:
         ${CMDNAME} run -- airflow list_dags
 
 mysql
-        Starts the MySQL console. Additional parameters are passed to the mysql clinet.
+        Starts the MySQL console. Additional parameters are passed to the mysql client.
 
         Tip:
         If you want to execute \"SELECT 123\" query, run following command:
@@ -88,7 +89,8 @@ mysql
 
 help
         Print help
-"""
+EOF
+echo
 }
 
 set +e
@@ -179,12 +181,12 @@ function log() {
 
 # Run functions
 function run_command_on_composer {
-    log "Running \"$@\" command on \"${COMPOSER_GKE_WORKER_NAME}\""
+    log "Running \"$*\" command on \"${COMPOSER_GKE_WORKER_NAME}\""
     kubectl exec --namespace="${COMPOSER_GKE_NAMESPACE_NAME}" -t "${COMPOSER_GKE_WORKER_NAME}" --container airflow-worker -- "$@"
 }
 
 function run_interactive_command_on_composer {
-    log "Running \"$@\" command on \"${COMPOSER_GKE_WORKER_NAME}\""
+    log "Running \"$*\" command on \"${COMPOSER_GKE_WORKER_NAME}\""
     kubectl exec --namespace="${COMPOSER_GKE_NAMESPACE_NAME}" -it "${COMPOSER_GKE_WORKER_NAME}" --container airflow-worker -- "$@"
 }
 
@@ -194,7 +196,6 @@ function fetch_composer_gke_info {
 
     COMPOSER_GKE_CLUSTER_NAME=$(gcloud beta composer environments describe "${COMPOSER_NAME}" --location "${COMPOSER_LOCATION}" '--format=value(config.gkeCluster)')
     COMPOSER_GKE_CLUSTER_ZONE=$(echo "${COMPOSER_GKE_CLUSTER_NAME}" | cut -d '/' -f 4)
-    COMPOSER_GKE_CLUSTER_ID=$(echo "${COMPOSER_GKE_CLUSTER_NAME}" | cut -d '/' -f 6)
 
     gcloud container clusters get-credentials "${COMPOSER_GKE_CLUSTER_NAME}" --zone "${COMPOSER_GKE_CLUSTER_ZONE}" &>/dev/null
     COMPOSER_GKE_NAMESPACE_NAME=$(kubectl get namespaces | grep "composer" | cut -d " " -f 1)
@@ -229,6 +230,7 @@ function fetch_composer_webui_info {
 function fetch_composer_mysql_info {
     log "Fetching information about the mysql"
 
+    # shellcheck disable=SC2016
     COMPOSER_MYSQL_URL="$(run_command_on_composer bash -c 'echo $AIRFLOW__CORE__SQL_ALCHEMY_CONN')"
     COMPOSER_MYSQL_HOST="$(echo "${COMPOSER_MYSQL_URL}" | cut -d "/" -f 3 | cut -d "@" -f 2)"
     COMPOSER_MYSQL_DATABASE="$(echo "${COMPOSER_MYSQL_URL}" | cut -d "/" -f 4)"

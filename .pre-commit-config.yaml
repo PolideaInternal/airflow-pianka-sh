@@ -1,0 +1,43 @@
+---
+default_stages: [commit, push]
+default_language_version:
+  # force all unspecified python hooks to run python3
+  python: python3
+minimum_pre_commit_version: "1.20.0"
+repos:
+  - repo: https://github.com/Lucas-C/pre-commit-hooks
+    rev: v1.1.9
+    hooks:
+      - id: forbid-tabs
+  - repo: meta
+    hooks:
+      - id: check-hooks-apply
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v3.2.0
+    hooks:
+      - id: check-merge-conflict
+      - id: detect-private-key
+      - id: end-of-file-fixer
+      - id: mixed-line-ending
+      - id: check-executables-have-shebangs
+      - id: trailing-whitespace
+  - repo: https://github.com/adrienverge/yamllint
+    rev: v1.24.2
+    hooks:
+      - id: yamllint
+        name: Check yaml files with yamllint
+        entry: yamllint -c yamllint-config.yml
+        types: [yaml]
+  - repo: local
+    hooks:
+      - id: shellcheck
+        name: Check Shell scripts syntax correctness
+        language: docker_image
+        entry: koalaman/shellcheck:stable -x -a
+        files: .sh$
+      - id: update-breeze-file
+        name: Update output of breeze command in BREEZE.rst
+        entry: "./scripts/pre_commit_usage.sh"
+        language: system
+        files: ^README.md$|^pianka.sh$
+        pass_filenames: false
