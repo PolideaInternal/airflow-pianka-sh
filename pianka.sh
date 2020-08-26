@@ -13,7 +13,7 @@ set -euo pipefail
 
 APP_CACHE_DIR="${APP_DIR}/.pianka-cache-dir"
 
-mkdir -pv "${APP_CACHE_DIR}"
+mkdir -pv "${APP_CACHE_DIR}" &> /dev/null
 
 CMDNAME="$(basename -- "$0")"
 
