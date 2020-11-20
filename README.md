@@ -62,18 +62,36 @@ run
         Run arbitrary command on the Airflow worker.
 
         Example:
-        If you want to list currnet running process, run following command:
+        If you want to list currnet running process, run:
         pianka.sh run -- ps -aux
 
-        If you want to list DAGs, run following command:
+        If you want to list DAGs, run:
         pianka.sh run -- airflow list_dags
 
 mysql
-        Starts the MySQL console. Additional parameters are passed to the mysql client.
+        Starts the MySQL console.
 
-        Tip:
-        If you want to execute \"SELECT 123\" query, run following command:
-        pianka.sh mysql -- --execute=\"SELECT 123\"
+        Additional parameters are passed to the mysql client.
+
+        Example:
+        If you want to execute "SELECT 123" query, run:
+        pianka.sh mysql -- --execute="SELECT 123"
+
+mysqltunnel
+        Starts the tunnel to MySQL database.
+
+        This allows you to connect to the database with any tool, including your IDE.
+mysqldump
+        Dumps database or selected table(s).
+
+        Additional parameters are passed to the mysqldump.
+
+        To dump "connection" table to "connection.sql" file, run:
+
+        pianka.sh mysqldump -- --column-statistics=0  connection > connection.sql
+
+        Reference:
+        https://dev.mysql.com/doc/refman/8.0/en/mysqldump.html
 
 help
         Print help
