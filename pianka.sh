@@ -20,7 +20,19 @@ CMDNAME="$(basename -- "$0")"
 KUBECONFIG=$(mktemp)
 export KUBECONFIG
 
-trap 'rm -f "${KUBECONFIG}"' EXIT
+function add_trap() {
+    trap="${1}"
+    shift
+    for signal in "${@}"
+    do
+        # adding trap to exiting trap
+        local handlers
+        handlers="$( trap -p "${signal}" | cut -f2 -d \' )"
+        # shellcheck disable=SC2064
+        trap "${trap};${handlers}" "${signal}"
+    done
+}
+add_trap 'rm -f "${KUBECONFIG}"' EXIT HUP INT TERM
 
 function save_to_file {
     # shellcheck disable=SC2005
@@ -74,18 +86,36 @@ run
         Run arbitrary command on the Airflow worker.
 
         Example:
-        If you want to list currnet running process, run following command:
+        If you want to list currnet running process, run:
         ${CMDNAME} run -- ps -aux
 
-        If you want to list DAGs, run following command:
+        If you want to list DAGs, ru:
         ${CMDNAME} run -- airflow list_dags
 
 mysql
-        Starts the MySQL console. Additional parameters are passed to the mysql client.
+        Starts the MySQL console.
 
-        Tip:
-        If you want to execute \"SELECT 123\" query, run following command:
-        ${CMDNAME} mysql -- --execute=\"SELECT 123\"
+        Additional parameters are passed to the mysql client.
+
+        Example:
+        If you want to execute "SELECT 123" query, run:
+        ${CMDNAME} mysql -- --execute="SELECT 123"
+
+mysqltunnel
+        Starts the tunnel to MySQL database.
+
+        This allows you to connect to the database with any tool, including your IDE.
+mysqldump
+        Dumps database or selected table(s).
+
+        Additional parameters are passed to the mysqldump.
+
+        To dump "connection" table to "connection.sql" file, run:
+
+        ${CMDNAME} mysqldump -- --column-statistics=0  connection > connection.sql
+
+        Reference:
+        https://dev.mysql.com/doc/refman/8.0/en/mysqldump.html
 
 help
         Print help
@@ -219,15 +249,15 @@ function fetch_composer_bucket_info {
 }
 
 function fetch_composer_webui_info {
-    log "Fetching information about the bucket"
+    log "Fetching information about the GCS bucket"
 
     COMPOSER_WEB_UI_URL=$(gcloud beta composer environments describe "${COMPOSER_NAME}" --location "${COMPOSER_LOCATION}" --format='value(config.airflowUri)')
 
     log "WEB UI URL:           ${COMPOSER_WEB_UI_URL}"
 }
 
-function fetch_composer_mysql_info {
-    log "Fetching information about the mysql"
+function fetch_composer_mysql_credentials {
+    log "Fetching MySQL credentials"
 
     # shellcheck disable=SC2016
     COMPOSER_MYSQL_URL="$(run_command_on_composer bash -c 'echo $AIRFLOW__CORE__SQL_ALCHEMY_CONN')"
@@ -271,10 +301,12 @@ elif [[ "${CMD}" == "info" ]] ; then
     fetch_composer_webui_info
     echo "WEB UI URL:            ${COMPOSER_WEB_UI_URL}"
 
-    fetch_composer_mysql_info
-    echo "SQL Alchemy URL:       ${COMPOSER_MYSQL_URL}"
-    echo "SQL Alchemy Host:      ${COMPOSER_MYSQL_HOST}"
-    echo "SQL Alchemy Database:  ${COMPOSER_MYSQL_DATABASE}"
+    fetch_composer_mysql_credentials
+    echo "SQL Alchemy URL: ${COMPOSER_MYSQL_URL}"
+    echo "  Host:          ${COMPOSER_MYSQL_HOST}"
+    echo "  User:          ${COMPOSER_MYSQL_USER}"
+    echo "  Password:      ${COMPOSER_MYSQL_PASSWORD}"
+    echo "  Database:      ${COMPOSER_MYSQL_DATABASE}"
 
     exit 0
 elif [[ "${CMD}" == "run" ]] ; then
@@ -293,6 +325,47 @@ elif [[ "${CMD}" == "mysql" ]] ; then
       --host="${COMPOSER_MYSQL_HOST}" \
       "${COMPOSER_MYSQL_DATABASE}" \
         "$@"
+    exit 0
+elif [[ "${CMD}" == "mysqltunnel" ]] ; then
+    fetch_composer_gke_info
+    fetch_composer_mysql_credentials
+    fetch_composer_gke_info
+    echo "To connect, run:"
+    echo "mysql \\"
+    echo "  --user='${COMPOSER_MYSQL_USER}' \\"
+    echo "  --password='${COMPOSER_MYSQL_PASSWORD}' \\"
+    echo "  --host=127.0.0.1 \\"
+    echo "  --port=3306 \\"
+    echo "  '${COMPOSER_MYSQL_DATABASE}'"
+    echo ""
+    echo "or"
+    echo ""
+    echo "Configure IDE to use this connection URI:"
+    echo "jdbc:mysql://root:${COMPOSER_MYSQL_PASSWORD}@127.0.0.1:3306/${COMPOSER_MYSQL_DATABASE}"
+    kubectl port-forward \
+      --namespace="default" \
+      "deployment/airflow-sqlproxy" \
+      3306
+    exit 0
+elif [[ "${CMD}" == "mysqldump" ]] ; then
+    fetch_composer_gke_info
+    fetch_composer_mysql_credentials
+    fetch_composer_gke_info
+
+    kubectl port-forward \
+      --namespace="default" \
+      "deployment/airflow-sqlproxy" \
+      3306 1>&2 &
+    sleep 5;
+    TUNNEL_PID=$!
+    # shellcheck disable=SC2064,SC2016
+    add_trap '$(kill '${TUNNEL_PID}' || true)' EXIT HUP INT TERM
+    mysqldump \
+      --user="${COMPOSER_MYSQL_USER}" \
+      --password="${COMPOSER_MYSQL_PASSWORD}" \
+      --host="127.0.0.1" \
+      --port=3306 \
+      "${COMPOSER_MYSQL_DATABASE}" "$@"
     exit 0
 else
     usage
