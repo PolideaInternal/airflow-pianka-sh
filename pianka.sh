@@ -32,6 +32,7 @@ function add_trap() {
         trap "${trap};${handlers}" "${signal}"
     done
 }
+# shellcheck disable=SC2016
 add_trap 'rm -f "${KUBECONFIG}"' EXIT HUP INT TERM
 
 function save_to_file {
@@ -89,7 +90,7 @@ run
         If you want to list currnet running process, run:
         ${CMDNAME} run -- ps -aux
 
-        If you want to list DAGs, ru:
+        If you want to list DAGs, run:
         ${CMDNAME} run -- airflow list_dags
 
 mysql
