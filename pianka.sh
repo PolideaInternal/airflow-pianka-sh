@@ -195,7 +195,6 @@ function fetch_composer_gke_info {
     log "Fetching information about the GKE cluster"
 
     COMPOSER_GKE_CLUSTER_NAME=$(gcloud beta composer environments describe "${COMPOSER_NAME}" --location "${COMPOSER_LOCATION}" '--format=value(config.gkeCluster)')
-    COMPOSER_GKE_CLUSTER_ZONE=$(echo "${COMPOSER_GKE_CLUSTER_NAME}" | cut -d '/' -f 4)
 
     gcloud container clusters get-credentials "${COMPOSER_GKE_CLUSTER_NAME}" --zone "any" &>/dev/null
     COMPOSER_GKE_NAMESPACE_NAME=$(kubectl get namespaces | grep "composer" | cut -d " " -f 1)
