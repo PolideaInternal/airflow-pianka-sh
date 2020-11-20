@@ -197,7 +197,7 @@ function fetch_composer_gke_info {
     COMPOSER_GKE_CLUSTER_NAME=$(gcloud beta composer environments describe "${COMPOSER_NAME}" --location "${COMPOSER_LOCATION}" '--format=value(config.gkeCluster)')
     COMPOSER_GKE_CLUSTER_ZONE=$(echo "${COMPOSER_GKE_CLUSTER_NAME}" | cut -d '/' -f 4)
 
-    gcloud container clusters get-credentials "${COMPOSER_GKE_CLUSTER_NAME}" --zone "${COMPOSER_GKE_CLUSTER_ZONE}" &>/dev/null
+    gcloud container clusters get-credentials "${COMPOSER_GKE_CLUSTER_NAME}" --zone "any" &>/dev/null
     COMPOSER_GKE_NAMESPACE_NAME=$(kubectl get namespaces | grep "composer" | cut -d " " -f 1)
     COMPOSER_GKE_WORKER_NAME=$(kubectl get pods --namespace="${COMPOSER_GKE_NAMESPACE_NAME}" | grep "airflow-worker" | grep "Running" | head -1 | cut -d " " -f 1)
 
@@ -232,12 +232,19 @@ function fetch_composer_mysql_info {
 
     # shellcheck disable=SC2016
     COMPOSER_MYSQL_URL="$(run_command_on_composer bash -c 'echo $AIRFLOW__CORE__SQL_ALCHEMY_CONN')"
-    COMPOSER_MYSQL_HOST="$(echo "${COMPOSER_MYSQL_URL}" | cut -d "/" -f 3 | cut -d "@" -f 2)"
-    COMPOSER_MYSQL_DATABASE="$(echo "${COMPOSER_MYSQL_URL}" | cut -d "/" -f 4)"
+    [[ ${COMPOSER_MYSQL_URL} =~ ([^:]*)://([^@/]*)@?([^/:]*):?([0-9]*)/([^\?]*)\??(.*) ]] && \
+      DETECTED_MYSQL_AUTHINFO=${BASH_REMATCH[2]} &&
+      COMPOSER_MYSQL_HOST=${BASH_REMATCH[3]} &&
+      COMPOSER_MYSQL_DATABASE=${BASH_REMATCH[5]}
 
-    log "SQL Alchemy URL:       ${COMPOSER_MYSQL_URL}"
-    log "SQL Alchemy Host:      ${COMPOSER_MYSQL_HOST}"
-    log "SQL Alchemy Database:  ${COMPOSER_MYSQL_DATABASE}"
+    COMPOSER_MYSQL_USER="$(echo "${DETECTED_MYSQL_AUTHINFO}" | cut -d ":" -f 1)"
+    COMPOSER_MYSQL_PASSWORD="$(echo "${DETECTED_MYSQL_AUTHINFO}" | cut -d ":" -f 2)"
+
+    log "SQL Alchemy URL: ${COMPOSER_MYSQL_URL}"
+    log "  Host:          ${COMPOSER_MYSQL_HOST}"
+    log "  User:          ${COMPOSER_MYSQL_USER}"
+    log "  Password:      ${COMPOSER_MYSQL_PASSWORD}"
+    log "  Database:      ${COMPOSER_MYSQL_DATABASE}"
 }
 
 
@@ -278,7 +285,15 @@ elif [[ "${CMD}" == "run" ]] ; then
 elif [[ "${CMD}" == "mysql" ]] ; then
     fetch_composer_gke_info
     fetch_composer_mysql_info
-    run_interactive_command_on_composer mysql -u root -h "${COMPOSER_MYSQL_HOST}" "${COMPOSER_MYSQL_DATABASE}" "$@"
+    fetch_composer_gke_info
+    fetch_composer_mysql_info
+    run_interactive_command_on_composer \
+      mysql \
+      --user="${COMPOSER_MYSQL_USER}" \
+      --password="${COMPOSER_MYSQL_PASSWORD}" \
+      --host="${COMPOSER_MYSQL_HOST}" \
+      "${COMPOSER_MYSQL_DATABASE}" \
+        "$@"
     exit 0
 else
     usage
